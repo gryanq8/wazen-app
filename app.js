@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = "https://gxvwpmwboynwhbjhloee.supabase.co";
 const SUPABASE_KEY = "sb_publishable_Q28F3Tgr-VpGChmIwM-4Yg_mis6nlZV";
+const WAZEN_VERSION = "supabase-v2";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -323,7 +324,7 @@ function renderAll(){
 async function addExpense(amount, category, note = "", method = "quick", date = todayISO()){
   amount = cleanNumber(amount);
   if(!amount || amount <= 0) return toast("أدخل مبلغًا صحيحًا");
-  const res = await supabase.from("expenses").insert({ amount, category, note, expense_date: date, entry_method: method });
+  const res = await supabase.from("expenses").insert({ user_id: authUser.id, amount, category, note, expense_date: date, entry_method: method });
   if(await checkSupabaseError(res, "تعذر حفظ المصروف")) return;
   await loadAll();
   toast("تم تسجيل المصروف");
@@ -356,7 +357,7 @@ async function saveSalary(){
   if(state.salary?.id){
     res = await supabase.from("salaries").update(payload).eq("id", state.salary.id);
   } else {
-    res = await supabase.from("salaries").insert(payload);
+    res = await supabase.from("salaries").insert({ ...payload, user_id: authUser.id });
   }
   if(await checkSupabaseError(res, "تعذر حفظ الراتب")) return;
   await loadAll();
@@ -369,6 +370,7 @@ async function addIncome(){
   if(!amount || amount <= 0) return toast("أدخل مبلغ الدخل");
   if(!source) return toast("أدخل مصدر الدخل");
   const res = await supabase.from("incomes").insert({
+    user_id: authUser.id,
     amount,
     source,
     income_date: $("incomeDate").value || todayISO(),
@@ -389,6 +391,7 @@ async function addGoal(){
   if(!target || target <= 0) return toast("أدخل مبلغ الهدف");
   if(!due) return toast("أدخل تاريخ الهدف");
   const res = await supabase.from("goals").insert({
+    user_id: authUser.id,
     name,
     target_amount: target,
     saved_amount: cleanNumber($("goalSavedAmount").value),
@@ -413,6 +416,7 @@ async function addObligation(){
   if(!amount || amount <= 0) return toast("أدخل مبلغ الالتزام");
   if(!dueDay || dueDay < 1 || dueDay > 31) return toast("أدخل يوم استحقاق صحيح");
   const res = await supabase.from("obligations").insert({
+    user_id: authUser.id,
     name,
     amount,
     type: $("obligationType").value,
@@ -477,6 +481,7 @@ async function runAI(questionType = "summary"){
   const answer = localAI(questionType, $("customAiQuestion").value.trim());
   $("aiAnswer").textContent = answer;
   await supabase.from("ai_reports").insert({
+    user_id: authUser.id,
     input_summary: { questionType },
     ai_output: answer
   });

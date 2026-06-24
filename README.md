@@ -1,26 +1,25 @@
-# وازن - نسخة Supabase
+# وازن - نسخة Supabase V2
 
-هذه النسخة مرتبطة بمشروع Supabase الحقيقي.
+هذه النسخة مرتبطة بقاعدة بيانات Supabase، وتستخدم حسابات Supabase Auth بدل LocalStorage.
 
-## الملفات المطلوبة في GitHub
+## ارفع هذه الملفات فقط إلى GitHub
 
 - index.html
 - style.css
 - app.js
 - README.md
 
-## بيانات الربط
+لا ترفع ملف ZIP نفسه.
 
-Project URL:
-https://gxvwpmwboynwhbjhloee.supabase.co
+## مهم
 
-المفتاح المستخدم:
-Publishable key فقط.
+إذا ظهرت لك عبارة "حسابات تجريبية" في صفحة الدخول بعد رفع هذه النسخة، فهذا يعني أن `index.html` القديم ما زال ظاهرًا أو أن المتصفح يعرض نسخة محفوظة.
 
-## ملاحظة مهمة
+الحل:
+- تأكد أن GitHub يحتوي على `index.html` الجديد.
+- افتح الصفحة بنافذة خاصة.
+- أو اضغط Command + Shift + R.
 
-زر إضافة المستخدمين من داخل النظام يحتاج Supabase Edge Function باسم:
+## المرحلة التالية
 
-create-wazen-user
-
-وسيتم تجهيزه في الخطوة التالية. لا تضع secret key داخل GitHub أو داخل app.js.
+زر إضافة المستخدمين من داخل النظام يحتاج Supabase Edge Function.
