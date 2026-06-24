@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>وازن</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="toast" class="toast hidden"></div>
+
+  <section id="loginView" class="auth-page">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <div class="logo">و</div>
+        <div>
+          <h1>وازن</h1>
+          <p>تحكم براتبك ومصروفاتك وأهدافك حتى الراتب القادم</p>
+        </div>
+      </div>
+
+      <form id="loginForm" class="form">
+        <label>البريد الإلكتروني</label>
+        <input id="loginEmail" type="email" placeholder="admin@example.com" required />
+
+        <label>كلمة المرور</label>
+        <input id="loginPassword" type="password" placeholder="123456" required />
+
+        <button class="primary" type="submit">دخول</button>
+      </form>
+
+      <div class="hint">
+        <strong>حسابات تجريبية:</strong><br>
+        أدمن: admin@example.com / 123456<br>
+        مستخدم: user@example.com / 123456
+      </div>
+    </div>
+  </section>
+
+  <section id="appView" class="hidden">
+    <header class="mobile-header">
+      <div class="mobile-header-inner">
+        <div class="mobile-brand">
+          <div class="mobile-logo">و</div>
+          <div>
+            <strong>وازن</strong>
+            <small id="mobilePageTitle">الرئيسية</small>
+          </div>
+        </div>
+        <button id="mobileLogoutBtn" class="mobile-pill">خروج</button>
+      </div>
+    </header>
+
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="logo">و</div>
+          <div>
+            <h1>وازن</h1>
+            <span id="roleBadge">User</span>
+          </div>
+        </div>
+
+        <nav class="side-nav">
+          <button class="nav-btn active" data-view="homeView">الرئيسية</button>
+          <button class="nav-btn" data-view="incomeView">الدخل والراتب</button>
+          <button class="nav-btn" data-view="goalsView">الأهداف</button>
+          <button class="nav-btn" data-view="obligationsView">الالتزامات</button>
+          <button class="nav-btn" data-view="expensesView">سجل المصروفات</button>
+          <button id="adminNavBtn" class="nav-btn hidden" data-view="adminView">إدارة الحسابات</button>
+          <button id="logoutBtn" class="nav-btn logout">تسجيل خروج</button>
+        </nav>
+      </aside>
+
+      <main>
+        <section id="homeView" class="view">
+          <div class="top">
+            <div>
+              <h2>الرئيسية</h2>
+              <p>مؤشرات مختصرة، تسجيل مصروف سريع، ومساعد ذكي يحلل بناءً على بياناتك فقط.</p>
+            </div>
+            <div id="nextPayChip" class="date-chip">الراتب القادم: —</div>
+          </div>
+
+          <div class="cards">
+            <div class="card main-card">
+              <span>المتاح الحقيقي للصرف</span>
+              <strong id="realAvailable">0.000 د.ك</strong>
+              <p id="realAvailableText">بعد خصم الالتزامات القريبة واحتياج الأهداف.</p>
+            </div>
+
+            <div class="card">
+              <span>المتبقي من الدخل</span>
+              <strong id="incomeRemaining">0.000</strong>
+              <p>دخل الدورة الحالية ناقص المصروفات المسجلة.</p>
+            </div>
+
+            <div class="card">
+              <span>المبلغ المناسب يوميًا</span>
+              <strong id="dailySafeAmount">0.000</strong>
+              <p>حتى تصل للراتب القادم بدون ضغط.</p>
+            </div>
+
+            <div class="card">
+              <span>الأهداف القريبة</span>
+              <strong id="nearGoalsCount">0</strong>
+              <p id="nearestGoalText">لا توجد أهداف قريبة.</p>
+            </div>
+          </div>
+
+          <div class="layout">
+            <div>
+              <div class="panel">
+                <h3>مصروف سريع</h3>
+                <div class="quick-expense">
+                  <input id="quickExpenseAmount" type="number" inputmode="decimal" step="0.001" placeholder="المبلغ" />
+                  <select id="quickExpenseCategory">
+                    <option>مطاعم</option>
+                    <option>قهوة</option>
+                    <option>بنزين</option>
+                    <option>جمعية</option>
+                    <option>مشتريات</option>
+                    <option>عائلة</option>
+                    <option>تعليم</option>
+                    <option>صحة</option>
+                    <option>أخرى</option>
+                  </select>
+                  <input id="quickExpenseNote" placeholder="ملاحظة اختيارية" />
+                  <button id="addQuickExpenseBtn" class="primary">إضافة</button>
+                </div>
+
+                <div class="templates">
+                  <button data-template-category="قهوة" data-template-amount="1.250">قهوة 1.250</button>
+                  <button data-template-category="بنزين" data-template-amount="10">بنزين 10</button>
+                  <button data-template-category="مطاعم" data-template-amount="5">مطاعم 5</button>
+                  <button data-template-category="جمعية" data-template-amount="20">جمعية 20</button>
+                  <button data-template-category="أخرى" data-template-amount="5">مصروف متنوع</button>
+                </div>
+              </div>
+
+              <div class="panel">
+                <h3>المساعد الذكي</h3>
+                <div class="ai-box">
+                  <div class="ai-actions">
+                    <button data-ai-question="summary">حلل وضعي</button>
+                    <button data-ai-question="today">هل أقدر أصرف اليوم؟</button>
+                    <button data-ai-question="pressure">ما أكثر بند ضاغط؟</button>
+                    <button data-ai-question="reduce">ماذا أخفف هذا الأسبوع؟</button>
+                  </div>
+                  <input id="customAiQuestion" placeholder="اكتب سؤالك هنا..." />
+                  <button id="askAiBtn" class="primary">اسأل وازن</button>
+                  <div id="aiAnswer" class="ai-answer">أضف دخلك ومصروفاتك وأهدافك، ثم اضغط على أحد أسئلة المساعد.</div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div class="panel">
+                <h3>تنبيه مختصر</h3>
+                <div id="statusBadge" class="status"><span class="dot"></span> بانتظار البيانات</div>
+                <p id="statusText" class="panel-text">أدخل الراتب وتاريخ الراتب القادم حتى تظهر المؤشرات بدقة.</p>
+              </div>
+
+              <div class="panel">
+                <h3>أعلى بنود الصرف</h3>
+                <div id="topCategoriesList" class="list"></div>
+              </div>
+
+              <div class="panel">
+                <h3>ملخص سريع</h3>
+                <div class="mini-grid">
+                  <div class="mini-card"><span>دخل إضافي</span><strong id="extraIncomeTotal">0.000</strong></div>
+                  <div class="mini-card"><span>التزامات مستمرة</span><strong id="continuousCount">0</strong></div>
+                  <div class="mini-card"><span>التزامات مؤقتة</span><strong id="temporaryCount">0</strong></div>
+                  <div class="mini-card"><span>مصروف اليوم</span><strong id="todayExpenseTotal">0.000</strong></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="incomeView" class="view hidden">
+          <div class="top">
+            <div>
+              <h2>الدخل والراتب</h2>
+              <p>الراتب الأساسي يدخل مرة واحدة، وأي دخل إضافي تضيفه عند الحاجة.</p>
+            </div>
+          </div>
+
+          <div class="layout">
+            <div>
+              <div class="panel">
+                <h3>إعداد الراتب الأساسي</h3>
+                <div class="form-grid">
+                  <div>
+                    <label>الراتب الأساسي</label>
+                    <input id="baseSalaryAmount" type="number" inputmode="decimal" step="0.001" placeholder="مثال: 1200" />
+                  </div>
+                  <div>
+                    <label>تاريخ نزول الراتب القادم</label>
+                    <input id="nextSalaryDate" type="date" />
+                  </div>
+                  <div>
+                    <label>ملاحظة اختيارية</label>
+                    <input id="salaryNote" placeholder="مثال: راتب شهري ثابت" />
+                  </div>
+                  <button id="saveSalaryBtn" class="primary">حفظ الراتب</button>
+                </div>
+              </div>
+
+              <div class="panel">
+                <h3>إضافة دخل آخر</h3>
+                <div class="form-grid">
+                  <div>
+                    <label>المبلغ</label>
+                    <input id="incomeAmount" type="number" inputmode="decimal" step="0.001" />
+                  </div>
+                  <div>
+                    <label>مصدر الدخل</label>
+                    <input id="incomeSource" placeholder="مكافأة / بدل / بيع شيء" />
+                  </div>
+                  <div>
+                    <label>التاريخ</label>
+                    <input id="incomeDate" type="date" />
+                  </div>
+                  <div>
+                    <label>هل يتكرر؟</label>
+                    <select id="incomeRecurring">
+                      <option value="no">لا</option>
+                      <option value="yes">نعم</option>
+                    </select>
+                  </div>
+                  <button id="addIncomeBtn" class="primary">إضافة الدخل</button>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div class="panel">
+                <h3>الدخل المسجل</h3>
+                <div id="incomeList" class="list"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="goalsView" class="view hidden">
+          <div class="top">
+            <div>
+              <h2>الأهداف</h2>
+              <p>أضف أهدافك المالية مثل السفر، التعليم، السيارة، أو أي التزام مستقبلي.</p>
+            </div>
+          </div>
+
+          <div class="layout">
+            <div class="panel">
+              <h3>إضافة هدف مالي</h3>
+              <div class="form-grid">
+                <div>
+                  <label>اسم الهدف</label>
+                  <input id="goalName" placeholder="مثال: سفرة / مدرسة الابن" />
+                </div>
+                <div>
+                  <label>المبلغ المطلوب</label>
+                  <input id="goalTargetAmount" type="number" inputmode="decimal" step="0.001" />
+                </div>
+                <div>
+                  <label>المبلغ المتوفر حاليًا</label>
+                  <input id="goalSavedAmount" type="number" inputmode="decimal" step="0.001" value="0" />
+                </div>
+                <div>
+                  <label>تاريخ الهدف</label>
+                  <input id="goalDueDate" type="date" />
+                </div>
+                <div>
+                  <label>الأولوية</label>
+                  <select id="goalPriority">
+                    <option value="high">عالية</option>
+                    <option value="medium">متوسطة</option>
+                    <option value="low">منخفضة</option>
+                  </select>
+                </div>
+                <button id="addGoalBtn" class="primary">حفظ الهدف</button>
+              </div>
+            </div>
+
+            <div class="panel">
+              <h3>الأهداف النشطة</h3>
+              <div id="goalsList" class="goal-list"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="obligationsView" class="view hidden">
+          <div class="top">
+            <div>
+              <h2>الالتزامات</h2>
+              <p>قسّم الالتزامات إلى مستمرة ومؤقتة حتى يعرف النظام الضغط المالي الحقيقي.</p>
+            </div>
+          </div>
+
+          <div class="layout">
+            <div class="panel">
+              <h3>إضافة التزام</h3>
+              <div class="form-grid">
+                <div>
+                  <label>اسم الالتزام</label>
+                  <input id="obligationName" placeholder="قسط / اشتراك / جمعية / مدرسة" />
+                </div>
+                <div>
+                  <label>المبلغ الشهري</label>
+                  <input id="obligationAmount" type="number" inputmode="decimal" step="0.001" />
+                </div>
+                <div>
+                  <label>نوع الالتزام</label>
+                  <select id="obligationType">
+                    <option value="continuous">مستمر</option>
+                    <option value="temporary">مؤقت ينتهي بعد فترة</option>
+                  </select>
+                </div>
+                <div>
+                  <label>يوم الاستحقاق</label>
+                  <input id="obligationDueDay" type="number" min="1" max="31" placeholder="مثال: 5" />
+                </div>
+                <div>
+                  <label>تاريخ البداية</label>
+                  <input id="obligationStartDate" type="date" />
+                </div>
+                <div>
+                  <label>تاريخ النهاية / اختياري للمستمر</label>
+                  <input id="obligationEndDate" type="date" />
+                </div>
+                <button id="addObligationBtn" class="primary">حفظ الالتزام</button>
+              </div>
+            </div>
+
+            <div class="panel">
+              <h3>الالتزامات المسجلة</h3>
+              <div id="obligationsList" class="list"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="expensesView" class="view hidden">
+          <div class="top">
+            <div>
+              <h2>سجل المصروفات</h2>
+              <p>هذه الصفحة للرجوع والتعديل. أما التسجيل اليومي السريع فمكانه في الرئيسية.</p>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h3>مصروف تفصيلي</h3>
+            <div class="form-grid">
+              <div>
+                <label>المبلغ</label>
+                <input id="expenseAmount" type="number" inputmode="decimal" step="0.001" />
+              </div>
+              <div>
+                <label>التصنيف</label>
+                <select id="expenseCategory">
+                  <option>مطاعم</option>
+                  <option>قهوة</option>
+                  <option>بنزين</option>
+                  <option>جمعية</option>
+                  <option>مشتريات</option>
+                  <option>عائلة</option>
+                  <option>تعليم</option>
+                  <option>صحة</option>
+                  <option>أخرى</option>
+                </select>
+              </div>
+              <div>
+                <label>التاريخ</label>
+                <input id="expenseDate" type="date" />
+              </div>
+              <div>
+                <label>ملاحظة</label>
+                <input id="expenseNote" />
+              </div>
+              <button id="addExpenseBtn" class="primary">حفظ المصروف</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h3>السجل</h3>
+            <div id="expensesList" class="list"></div>
+          </div>
+        </section>
+
+        <section id="adminView" class="view hidden">
+          <div class="top">
+            <div>
+              <h2>إدارة الحسابات</h2>
+              <p>هذه الصفحة تظهر للأدمن فقط لإضافة مستخدمين أو إيقافهم.</p>
+            </div>
+          </div>
+
+          <div class="layout">
+            <div class="panel">
+              <h3>إضافة حساب</h3>
+              <div class="form-grid">
+                <div>
+                  <label>الاسم</label>
+                  <input id="newUserName" />
+                </div>
+                <div>
+                  <label>البريد</label>
+                  <input id="newUserEmail" type="email" />
+                </div>
+                <div>
+                  <label>كلمة المرور المؤقتة</label>
+                  <input id="newUserPassword" value="123456" />
+                </div>
+                <div>
+                  <label>الدور</label>
+                  <select id="newUserRole">
+                    <option value="user">مستخدم</option>
+                    <option value="admin">أدمن</option>
+                  </select>
+                </div>
+                <button id="addUserBtn" class="primary">إضافة الحساب</button>
+              </div>
+            </div>
+
+            <div class="panel">
+              <h3>الحسابات</h3>
+              <div id="usersList" class="list"></div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="bottom-nav">
+      <div class="bottom-nav-grid">
+        <button class="bottom-btn active" data-view="homeView"><span>⌂</span>الرئيسية</button>
+        <button class="bottom-btn" data-view="incomeView"><span>＋</span>الدخل</button>
+        <button class="bottom-btn" data-view="goalsView"><span>◎</span>الأهداف</button>
+        <button class="bottom-btn" data-view="obligationsView"><span>▣</span>الالتزامات</button>
+        <button class="bottom-btn" data-view="expensesView"><span>☰</span>السجل</button>
+      </div>
+    </div>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>
