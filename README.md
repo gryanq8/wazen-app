@@ -23,3 +23,4 @@
 ## المرحلة التالية
 
 زر إضافة المستخدمين من داخل النظام يحتاج Supabase Edge Function.
+Updated for Supabase V2.
