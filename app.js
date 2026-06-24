@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = "https://gxvwpmwboynwhbjhloee.supabase.co";
 const SUPABASE_KEY = "sb_publishable_Q28F3Tgr-VpGChmIwM-4Yg_mis6nlZV";
-const WAZEN_VERSION = "supabase-v2";
+const WAZEN_VERSION = "supabase-ai-v1";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -434,57 +434,44 @@ async function addObligation(){
   toast("تم حفظ الالتزام");
 }
 
-function localAI(questionType, customQuestion = ""){
-  const s = calcSummary();
-  const lines = [];
-  lines.push("تحليل وازن بناءً على البيانات المدخلة فقط:");
-  lines.push("");
-  if(!s.baseSalary) lines.push("البيانات الناقصة: الراتب الأساسي.");
-  lines.push(`الدخل الكلي في الدورة الحالية: ${money(s.totalIncome)}.`);
-  lines.push(`إجمالي المصروفات المسجلة: ${money(s.totalExpenses)}.`);
-  lines.push(`المتبقي من الدخل: ${money(s.incomeRemaining)}.`);
-  lines.push(`المتاح الحقيقي للصرف: ${money(s.realAvailable)}.`);
-  lines.push(`المبلغ المناسب يوميًا حتى الراتب القادم: ${money(s.dailySafe)}.`);
-  lines.push("");
-
-  if(questionType === "today"){
-    lines.push(s.dailySafe <= 0 ? "اليوم لا يوجد مجال آمن للصرف حسب البيانات الحالية." : `تستطيع الصرف اليوم بشرط أن يكون قريبًا من ${money(s.dailySafe)} أو أقل.`);
-  } else if(questionType === "pressure"){
-    const pressures = [];
-    if(s.upcomingObligations > 0) pressures.push(`الالتزامات القريبة: ${money(s.upcomingObligations)}`);
-    if(s.goalsRequiredNearTerm > 0) pressures.push(`احتياج الأهداف القريبة: ${money(s.goalsRequiredNearTerm)}`);
-    if(s.topCategories[0]) pressures.push(`أعلى بند صرف: ${s.topCategories[0][0]} بقيمة ${money(s.topCategories[0][1])}`);
-    lines.push(pressures.length ? `أكثر عناصر الضغط الحالية:\n- ${pressures.join("\n- ")}` : "لا توجد عناصر ضغط واضحة لأن البيانات قليلة.");
-  } else if(questionType === "reduce"){
-    lines.push(s.topCategories[0] ? `ابدأ بتخفيف بند ${s.topCategories[0][0]} لأنه أعلى بند صرف مسجل.` : "لا توجد مصروفات كافية لتحديد بند يمكن تخفيفه.");
-  } else {
-    lines.push(s.realAvailable < 0 ? "الحالة: ضغط مالي." : s.dailySafe < 5 ? "الحالة: تحتاج متابعة." : "الحالة: مستقرة مبدئيًا.");
-  }
-
-  if(s.nearestGoal){
-    const need = Math.max(0, cleanNumber(s.nearestGoal.target_amount) - cleanNumber(s.nearestGoal.saved_amount));
-    lines.push("");
-    lines.push(`أقرب هدف: ${s.nearestGoal.name}، والمتبقي له ${money(need)}.`);
-  }
-
-  if(customQuestion){
-    lines.push("");
-    lines.push(`سؤالك: ${customQuestion}`);
-  }
-
-  lines.push("");
-  lines.push("ملاحظة: هذا تحليل تنظيمي للمصروفات وليس نصيحة استثمارية أو ائتمانية.");
-  return lines.join("\n");
-}
-
 async function runAI(questionType = "summary"){
-  const answer = localAI(questionType, $("customAiQuestion").value.trim());
-  $("aiAnswer").textContent = answer;
-  await supabase.from("ai_reports").insert({
-    user_id: authUser.id,
-    input_summary: { questionType },
-    ai_output: answer
+  const customQuestion = $("customAiQuestion").value.trim();
+
+  const questionMap = {
+    summary: "حلل وضعي المالي",
+    today: "هل أقدر أصرف اليوم؟",
+    pressure: "ما أكثر بند ضاغط؟",
+    reduce: "ماذا أخفف هذا الأسبوع؟",
+    custom: customQuestion || "حلل وضعي المالي"
+  };
+
+  const question = questionMap[questionType] || customQuestion || "حلل وضعي المالي";
+
+  $("aiAnswer").textContent = "جاري تحليل بياناتك عبر وازن الذكي...";
+
+  const res = await supabase.functions.invoke("analyze-finance", {
+    body: { question }
   });
+
+  if (res.error) {
+    console.error(res.error);
+    $("aiAnswer").textContent =
+      "تعذر تشغيل التحليل الذكي. تأكد من نشر دالة analyze-finance ومن وجود رصيد في OpenAI API.";
+    toast("تعذر تشغيل التحليل الذكي");
+    return;
+  }
+
+  const data = res.data;
+
+  if (data?.error) {
+    console.error(data);
+    $("aiAnswer").textContent =
+      "حدث خطأ أثناء التحليل:\n" + JSON.stringify(data, null, 2);
+    toast("حدث خطأ في التحليل");
+    return;
+  }
+
+  $("aiAnswer").textContent = data?.analysis || "لم يرجع التحليل نتيجة واضحة.";
 }
 
 async function createUserFromAdmin(){
