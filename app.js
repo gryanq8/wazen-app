@@ -1,107 +1,100 @@
-const LS_KEY = "wazen_app_v1";
-const SESSION_KEY = "wazen_session_v1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const SUPABASE_URL = "https://gxvwpmwboynwhbjhloee.supabase.co";
+const SUPABASE_KEY = "sb_publishable_Q28F3Tgr-VpGChmIwM-4Yg_mis6nlZV";
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const $ = (id) => document.getElementById(id);
 const todayISO = () => new Date().toISOString().slice(0, 10);
-const uid = () => crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random());
 const money = (n) => `${Number(n || 0).toFixed(3)} د.ك`;
 const cleanNumber = (v) => Number(v || 0);
 
-let db = loadDB();
-let session = loadSession();
-
-function seedDB(){
-  return {
-    users: [
-      { id: "admin-1", name: "الأدمن", email: "admin@example.com", password: "123456", role: "admin", status: "active", created_at: todayISO() },
-      { id: "user-1", name: "مستخدم تجريبي", email: "user@example.com", password: "123456", role: "user", status: "active", created_at: todayISO() }
-    ],
-    salaries: {
-      "admin-1": { base_amount: 2454, next_salary_date: "2026-06-28", note: "راتب أساسي" },
-      "user-1": { base_amount: 900, next_salary_date: "2026-06-28", note: "راتب أساسي" }
-    },
-    incomes: [
-      { id: uid(), user_id: "admin-1", amount: 150, source: "دخل إضافي تجريبي", date: todayISO(), recurring: "no" }
-    ],
-    expenses: [
-      { id: uid(), user_id: "admin-1", amount: 1.250, category: "قهوة", note: "قالب تجريبي", date: todayISO(), entry_method: "quick" },
-      { id: uid(), user_id: "admin-1", amount: 10, category: "بنزين", note: "", date: todayISO(), entry_method: "quick" }
-    ],
-    goals: [
-      { id: uid(), user_id: "admin-1", name: "مدرسة عبدالرحمن", target_amount: 600, saved_amount: 150, due_date: "2026-08-01", priority: "high", status: "active" },
-      { id: uid(), user_id: "admin-1", name: "سفرة", target_amount: 500, saved_amount: 100, due_date: "2026-08-15", priority: "medium", status: "active" }
-    ],
-    obligations: [
-      { id: uid(), user_id: "admin-1", name: "اشتراك شهري", amount: 18, type: "continuous", due_day: 5, start_date: "2026-01-01", end_date: "", status: "active" },
-      { id: uid(), user_id: "admin-1", name: "قسط مؤقت", amount: 120, type: "temporary", due_day: 10, start_date: "2026-01-01", end_date: "2026-12-31", status: "active" }
-    ],
-    ai_reports: []
-  };
-}
-
-function loadDB(){
-  const raw = localStorage.getItem(LS_KEY);
-  if(raw){
-    try { return JSON.parse(raw); } catch(e){}
-  }
-  const data = seedDB();
-  localStorage.setItem(LS_KEY, JSON.stringify(data));
-  return data;
-}
-
-function saveDB(){
-  localStorage.setItem(LS_KEY, JSON.stringify(db));
-}
-
-function loadSession(){
-  const raw = localStorage.getItem(SESSION_KEY);
-  if(!raw) return null;
-  try { return JSON.parse(raw); } catch(e){ return null; }
-}
-
-function saveSession(){
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-}
+let authUser = null;
+let profile = null;
+let state = {
+  salary: null,
+  incomes: [],
+  expenses: [],
+  goals: [],
+  obligations: [],
+  profiles: []
+};
 
 function toast(message){
   $("toast").textContent = message;
   $("toast").classList.remove("hidden");
-  setTimeout(() => $("toast").classList.add("hidden"), 2500);
+  setTimeout(() => $("toast").classList.add("hidden"), 2600);
 }
 
-function currentUser(){
-  return db.users.find(u => u.id === session?.user_id);
+async function checkSupabaseError(result, fallback = "حدث خطأ"){
+  if(result.error){
+    console.error(result.error);
+    toast(result.error.message || fallback);
+    return true;
+  }
+  return false;
 }
 
-function requireUserItems(table){
-  return db[table].filter(x => x.user_id === session.user_id);
+async function init(){
+  const { data } = await supabase.auth.getSession();
+  if(data.session?.user){
+    authUser = data.session.user;
+    await loadProfile();
+    await showApp();
+  } else {
+    $("loginView").classList.remove("hidden");
+    $("appView").classList.add("hidden");
+  }
 }
 
-function login(email, password){
-  const user = db.users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
-  if(!user) return toast("بيانات الدخول غير صحيحة");
-  if(user.status !== "active") return toast("الحساب موقوف");
-  session = { user_id: user.id };
-  saveSession();
-  showApp();
+async function loadProfile(){
+  const res = await supabase.from("profiles").select("*").eq("id", authUser.id).single();
+  if(res.error){
+    console.error(res.error);
+    profile = null;
+    return;
+  }
+  profile = res.data;
 }
 
-function logout(){
-  session = null;
-  localStorage.removeItem(SESSION_KEY);
+async function login(email, password){
+  const res = await supabase.auth.signInWithPassword({ email, password });
+  if(await checkSupabaseError(res, "تعذر تسجيل الدخول")) return;
+
+  authUser = res.data.user;
+  await loadProfile();
+
+  if(!profile){
+    toast("الحساب موجود في Authentication لكنه غير مربوط بجدول profiles.");
+    await supabase.auth.signOut();
+    return;
+  }
+
+  if(profile.status !== "active"){
+    toast("الحساب موقوف");
+    await supabase.auth.signOut();
+    return;
+  }
+
+  await showApp();
+}
+
+async function logout(){
+  await supabase.auth.signOut();
+  authUser = null;
+  profile = null;
   $("appView").classList.add("hidden");
   $("loginView").classList.remove("hidden");
 }
 
-function showApp(){
-  const user = currentUser();
-  if(!user) return logout();
-
+async function showApp(){
   $("loginView").classList.add("hidden");
   $("appView").classList.remove("hidden");
-  $("roleBadge").textContent = user.role === "admin" ? "Admin" : "User";
-  $("adminNavBtn").classList.toggle("hidden", user.role !== "admin");
-  switchView("homeView");
+  $("roleBadge").textContent = profile.role === "admin" ? "Admin" : "User";
+  $("adminNavBtn").classList.toggle("hidden", profile.role !== "admin");
+  await loadAll();
+  switchView("homeView", false);
 }
 
 function pageTitle(view){
@@ -115,9 +108,8 @@ function pageTitle(view){
   }[view] || "الرئيسية";
 }
 
-function switchView(view){
-  const user = currentUser();
-  if(view === "adminView" && user.role !== "admin") return toast("هذه الصفحة للأدمن فقط");
+function switchView(view, shouldRender = true){
+  if(view === "adminView" && profile.role !== "admin") return toast("هذه الصفحة للأدمن فقط");
 
   document.querySelectorAll(".view").forEach(v => v.classList.add("hidden"));
   $(view).classList.remove("hidden");
@@ -126,8 +118,36 @@ function switchView(view){
   document.querySelectorAll(`[data-view="${view}"]`).forEach(btn => btn.classList.add("active"));
 
   $("mobilePageTitle").textContent = pageTitle(view);
-  renderAll();
+  if(shouldRender) renderAll();
   window.scrollTo({top:0, behavior:"smooth"});
+}
+
+async function loadAll(){
+  const [salaryRes, incomesRes, expensesRes, goalsRes, obligationsRes] = await Promise.all([
+    supabase.from("salaries").select("*").order("created_at", { ascending:false }).limit(1),
+    supabase.from("incomes").select("*").order("income_date", { ascending:false }),
+    supabase.from("expenses").select("*").order("expense_date", { ascending:false }),
+    supabase.from("goals").select("*").neq("status", "done").order("due_date", { ascending:true }),
+    supabase.from("obligations").select("*").neq("status", "inactive").order("due_day", { ascending:true })
+  ]);
+
+  if(await checkSupabaseError(salaryRes, "تعذر تحميل الراتب")) return;
+  if(await checkSupabaseError(incomesRes, "تعذر تحميل الدخل")) return;
+  if(await checkSupabaseError(expensesRes, "تعذر تحميل المصروفات")) return;
+  if(await checkSupabaseError(goalsRes, "تعذر تحميل الأهداف")) return;
+  if(await checkSupabaseError(obligationsRes, "تعذر تحميل الالتزامات")) return;
+
+  state.salary = salaryRes.data?.[0] || null;
+  state.incomes = incomesRes.data || [];
+  state.expenses = expensesRes.data || [];
+  state.goals = goalsRes.data || [];
+  state.obligations = obligationsRes.data || [];
+
+  if(profile.role === "admin"){
+    const profilesRes = await supabase.from("profiles").select("*").order("created_at", { ascending:false });
+    state.profiles = profilesRes.data || [];
+  }
+  renderAll();
 }
 
 function daysBetween(dateText){
@@ -139,7 +159,7 @@ function daysBetween(dateText){
 }
 
 function isDateInCurrentCycle(dateText, nextSalaryDate){
-  if(!dateText) return false;
+  if(!dateText || !nextSalaryDate) return true;
   const d = new Date(dateText + "T00:00:00");
   const next = new Date(nextSalaryDate + "T00:00:00");
   const start = new Date(next);
@@ -148,17 +168,12 @@ function isDateInCurrentCycle(dateText, nextSalaryDate){
 }
 
 function calcSummary(){
-  const salary = db.salaries[session.user_id] || { base_amount: 0, next_salary_date: todayISO(), note: "" };
-  const incomesAll = requireUserItems("incomes");
-  const expensesAll = requireUserItems("expenses");
-  const obligations = requireUserItems("obligations").filter(o => o.status !== "inactive");
-  const goals = requireUserItems("goals").filter(g => g.status !== "done");
-
+  const salary = state.salary || { base_amount: 0, next_salary_date: todayISO(), note: "" };
   const nextSalaryDate = salary.next_salary_date || todayISO();
   const daysToSalary = daysBetween(nextSalaryDate);
 
-  const extraIncomes = incomesAll.filter(i => isDateInCurrentCycle(i.date, nextSalaryDate));
-  const cycleExpenses = expensesAll.filter(e => isDateInCurrentCycle(e.date, nextSalaryDate));
+  const extraIncomes = state.incomes.filter(i => isDateInCurrentCycle(i.income_date, nextSalaryDate));
+  const cycleExpenses = state.expenses.filter(e => isDateInCurrentCycle(e.expense_date, nextSalaryDate));
 
   const baseSalary = cleanNumber(salary.base_amount);
   const extraIncomeTotal = extraIncomes.reduce((s, i) => s + cleanNumber(i.amount), 0);
@@ -169,7 +184,7 @@ function calcSummary(){
   const today = new Date();
   const currentDay = today.getDate();
 
-  const upcomingObligations = obligations
+  const upcomingObligations = state.obligations
     .filter(o => {
       if(o.type === "temporary" && o.end_date){
         const end = new Date(o.end_date + "T00:00:00");
@@ -179,7 +194,7 @@ function calcSummary(){
     })
     .reduce((s, o) => s + cleanNumber(o.amount), 0);
 
-  const nearGoals = goals.filter(g => daysBetween(g.due_date) <= 60);
+  const nearGoals = state.goals.filter(g => daysBetween(g.due_date) <= 60);
   const goalsRequiredNearTerm = nearGoals.reduce((sum, g) => {
     const need = Math.max(0, cleanNumber(g.target_amount) - cleanNumber(g.saved_amount));
     const gDays = Math.max(1, daysBetween(g.due_date));
@@ -197,38 +212,15 @@ function calcSummary(){
 
   const topCategories = Object.entries(categories).sort((a,b) => b[1] - a[1]).slice(0, 5);
 
-  const nearestGoal = goals
+  const nearestGoal = state.goals
     .map(g => ({...g, days_left: daysBetween(g.due_date)}))
     .sort((a,b) => a.days_left - b.days_left)[0];
 
-  const todayExpenseTotal = expensesAll
-    .filter(e => e.date === todayISO())
+  const todayExpenseTotal = state.expenses
+    .filter(e => e.expense_date === todayISO())
     .reduce((s,e) => s + cleanNumber(e.amount), 0);
 
-  return {
-    salary,
-    baseSalary,
-    nextSalaryDate,
-    daysToSalary,
-    incomesAll,
-    extraIncomes,
-    extraIncomeTotal,
-    totalIncome,
-    expensesAll,
-    cycleExpenses,
-    totalExpenses,
-    incomeRemaining,
-    obligations,
-    upcomingObligations,
-    goals,
-    nearGoals,
-    goalsRequiredNearTerm,
-    realAvailable,
-    dailySafe,
-    topCategories,
-    nearestGoal,
-    todayExpenseTotal
-  };
+  return { salary, baseSalary, nextSalaryDate, daysToSalary, extraIncomeTotal, totalIncome, totalExpenses, incomeRemaining, upcomingObligations, nearGoals, goalsRequiredNearTerm, realAvailable, dailySafe, topCategories, nearestGoal, todayExpenseTotal };
 }
 
 function renderHome(){
@@ -241,8 +233,8 @@ function renderHome(){
   $("nearGoalsCount").textContent = s.nearGoals.length;
   $("nearestGoalText").textContent = s.nearestGoal ? `أقرب هدف: ${s.nearestGoal.name}.` : "لا توجد أهداف قريبة.";
   $("extraIncomeTotal").textContent = money(s.extraIncomeTotal);
-  $("continuousCount").textContent = s.obligations.filter(o => o.type === "continuous").length;
-  $("temporaryCount").textContent = s.obligations.filter(o => o.type === "temporary").length;
+  $("continuousCount").textContent = state.obligations.filter(o => o.type === "continuous").length;
+  $("temporaryCount").textContent = state.obligations.filter(o => o.type === "temporary").length;
   $("todayExpenseTotal").textContent = money(s.todayExpenseTotal);
 
   const status = $("statusBadge");
@@ -254,141 +246,72 @@ function renderHome(){
   } else if(s.realAvailable < 0){
     status.classList.add("bad");
     status.innerHTML = `<span class="dot"></span> ضغط مالي`;
-    $("statusText").textContent = "المتاح الحقيقي بالسالب بعد خصم الالتزامات والأهداف القريبة. يفضل تقليل المصروفات الكمالية مؤقتًا.";
+    $("statusText").textContent = "المتاح الحقيقي بالسالب بعد خصم الالتزامات والأهداف القريبة.";
     $("realAvailableText").textContent = "تنبيه: المتاح الحقيقي أقل من صفر.";
   } else if(s.dailySafe < 5){
     status.innerHTML = `<span class="dot"></span> يحتاج متابعة`;
     $("statusText").textContent = "المبلغ اليومي المناسب منخفض. الأفضل مراقبة المصروفات اليومية.";
-    $("realAvailableText").textContent = "متاح، لكن يحتاج متابعة يومية.";
+    $("realAvailableText").textContent = "متاح، لكنه يحتاج متابعة يومية.";
   } else {
     status.classList.add("good");
     status.innerHTML = `<span class="dot"></span> مستقر`;
-    $("statusText").textContent = "الوضع مقبول حسب البيانات المدخلة، مع الاستمرار بعدم تجاوز المبلغ اليومي المناسب.";
+    $("statusText").textContent = "الوضع مقبول حسب البيانات المدخلة.";
     $("realAvailableText").textContent = "بعد خصم الالتزامات القريبة واحتياج الأهداف.";
   }
 
   $("topCategoriesList").innerHTML = s.topCategories.length
-    ? s.topCategories.map(([cat, amount]) => `
-      <div class="item">
-        <div><b>${cat}</b><small>مصروفات متغيرة</small></div>
-        <div class="amount">${money(amount)}</div>
-      </div>
-    `).join("")
+    ? s.topCategories.map(([cat, amount]) => `<div class="item"><div><b>${cat}</b><small>مصروفات متغيرة</small></div><div class="amount">${money(amount)}</div></div>`).join("")
     : `<div class="muted">لا توجد مصروفات في الدورة الحالية.</div>`;
 }
 
 function renderIncome(){
   const s = calcSummary();
-  $("baseSalaryAmount").value = s.salary.base_amount || "";
-  $("nextSalaryDate").value = s.salary.next_salary_date || todayISO();
-  $("salaryNote").value = s.salary.note || "";
+  $("baseSalaryAmount").value = state.salary?.base_amount || "";
+  $("nextSalaryDate").value = state.salary?.next_salary_date || todayISO();
+  $("salaryNote").value = state.salary?.note || "";
   $("incomeDate").value ||= todayISO();
 
-  $("incomeList").innerHTML = s.incomesAll.length
-    ? s.incomesAll.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(i => `
-      <div class="item">
-        <div>
-          <b>${i.source || "دخل آخر"}</b>
-          <small>${i.date} — ${i.recurring === "yes" ? "متكرر" : "غير متكرر"}</small>
-        </div>
-        <div class="amount">${money(i.amount)}</div>
-        <div class="item-actions">
-          <button class="danger-btn" onclick="deleteItem('incomes','${i.id}')">حذف</button>
-        </div>
-      </div>
-    `).join("")
+  $("incomeList").innerHTML = state.incomes.length
+    ? state.incomes.map(i => `<div class="item"><div><b>${i.source}</b><small>${i.income_date} — ${i.recurring ? "متكرر" : "غير متكرر"}</small></div><div class="amount">${money(i.amount)}</div><div class="item-actions"><button class="danger-btn" data-delete-table="incomes" data-delete-id="${i.id}">حذف</button></div></div>`).join("")
     : `<div class="muted">لا يوجد دخل إضافي مسجل.</div>`;
 }
 
-function priorityLabel(priority){
-  if(priority === "high") return "عالية";
-  if(priority === "medium") return "متوسطة";
-  return "منخفضة";
-}
+function priorityLabel(priority){ return priority === "high" ? "عالية" : priority === "medium" ? "متوسطة" : "منخفضة"; }
 
 function renderGoals(){
-  const goals = requireUserItems("goals").filter(g => g.status !== "done");
-  $("goalsList").innerHTML = goals.length
-    ? goals.map(g => {
+  $("goalsList").innerHTML = state.goals.length
+    ? state.goals.map(g => {
       const target = Math.max(1, cleanNumber(g.target_amount));
       const saved = cleanNumber(g.saved_amount);
       const pct = Math.min(100, saved / target * 100);
       const need = Math.max(0, cleanNumber(g.target_amount) - saved);
-      return `
-        <div class="goal-card">
-          <span class="priority ${g.priority}">${priorityLabel(g.priority)}</span>
-          <h3>${g.name}</h3>
-          <p class="muted">تاريخ الهدف: ${g.due_date} — باقي ${daysBetween(g.due_date)} يوم</p>
-          <div class="progress"><span style="width:${pct}%"></span></div>
-          <p>المطلوب: <b>${money(g.target_amount)}</b><br>المتوفر: <b>${money(g.saved_amount)}</b><br>المتبقي: <b>${money(need)}</b></p>
-          <div class="item-actions">
-            <button class="ghost-btn" onclick="addGoalSaving('${g.id}')">إضافة مبلغ</button>
-            <button class="danger-btn" onclick="deleteItem('goals','${g.id}')">حذف</button>
-          </div>
-        </div>
-      `;
+      return `<div class="goal-card"><span class="priority ${g.priority}">${priorityLabel(g.priority)}</span><h3>${g.name}</h3><p class="muted">تاريخ الهدف: ${g.due_date} — باقي ${daysBetween(g.due_date)} يوم</p><div class="progress"><span style="width:${pct}%"></span></div><p>المطلوب: <b>${money(g.target_amount)}</b><br>المتوفر: <b>${money(g.saved_amount)}</b><br>المتبقي: <b>${money(need)}</b></p><div class="item-actions"><button class="ghost-btn" data-goal-saving="${g.id}">إضافة مبلغ</button><button class="danger-btn" data-delete-table="goals" data-delete-id="${g.id}">حذف</button></div></div>`;
     }).join("")
     : `<div class="muted">لا توجد أهداف نشطة.</div>`;
 }
 
 function renderObligations(){
-  const obligations = requireUserItems("obligations").filter(o => o.status !== "inactive");
   $("obligationStartDate").value ||= todayISO();
-
-  $("obligationsList").innerHTML = obligations.length
-    ? obligations.map(o => `
-      <div class="item">
-        <div>
-          <b>${o.name}</b>
-          <small>${o.type === "continuous" ? "التزام مستمر" : "التزام مؤقت"} — يوم الاستحقاق ${o.due_day}${o.end_date ? " — ينتهي " + o.end_date : ""}</small>
-        </div>
-        <div class="amount">${money(o.amount)}</div>
-        <div class="item-actions">
-          <button class="danger-btn" onclick="deleteItem('obligations','${o.id}')">حذف</button>
-        </div>
-      </div>
-    `).join("")
+  $("obligationsList").innerHTML = state.obligations.length
+    ? state.obligations.map(o => `<div class="item"><div><b>${o.name}</b><small>${o.type === "continuous" ? "التزام مستمر" : "التزام مؤقت"} — يوم الاستحقاق ${o.due_day}${o.end_date ? " — ينتهي " + o.end_date : ""}</small></div><div class="amount">${money(o.amount)}</div><div class="item-actions"><button class="danger-btn" data-delete-table="obligations" data-delete-id="${o.id}">حذف</button></div></div>`).join("")
     : `<div class="muted">لا توجد التزامات مسجلة.</div>`;
 }
 
 function renderExpenses(){
   $("expenseDate").value ||= todayISO();
-  const rows = requireUserItems("expenses").slice().sort((a,b)=>b.date.localeCompare(a.date));
-  $("expensesList").innerHTML = rows.length
-    ? rows.map(e => `
-      <div class="item">
-        <div>
-          <b>${e.category}</b>
-          <small>${e.date}${e.note ? " — " + e.note : ""}</small>
-        </div>
-        <div class="amount">${money(e.amount)}</div>
-        <div class="item-actions">
-          <button class="danger-btn" onclick="deleteItem('expenses','${e.id}')">حذف</button>
-        </div>
-      </div>
-    `).join("")
+  $("expensesList").innerHTML = state.expenses.length
+    ? state.expenses.map(e => `<div class="item"><div><b>${e.category}</b><small>${e.expense_date}${e.note ? " — " + e.note : ""}</small></div><div class="amount">${money(e.amount)}</div><div class="item-actions"><button class="danger-btn" data-delete-table="expenses" data-delete-id="${e.id}">حذف</button></div></div>`).join("")
     : `<div class="muted">لا توجد مصروفات مسجلة.</div>`;
 }
 
 function renderAdmin(){
-  const user = currentUser();
-  if(user.role !== "admin") return;
-
-  $("usersList").innerHTML = db.users.map(u => `
-    <div class="item">
-      <div>
-        <b>${u.name}</b>
-        <small>${u.email} — ${u.role === "admin" ? "أدمن" : "مستخدم"} — ${u.status === "active" ? "نشط" : "موقوف"}</small>
-      </div>
-      <div class="item-actions">
-        ${u.id !== user.id ? `<button class="ghost-btn" onclick="toggleUser('${u.id}')">${u.status === "active" ? "إيقاف" : "تفعيل"}</button>` : ""}
-      </div>
-    </div>
-  `).join("");
+  if(profile.role !== "admin") return;
+  $("usersList").innerHTML = state.profiles.length
+    ? state.profiles.map(p => `<div class="item"><div><b>${p.full_name}</b><small>${p.role === "admin" ? "أدمن" : "مستخدم"} — ${p.status}</small></div></div>`).join("")
+    : `<div class="muted">لا توجد ملفات مستخدمين ظاهرة.</div>`;
 }
 
 function renderAll(){
-  if(!currentUser()) return;
   renderHome();
   renderIncome();
   renderGoals();
@@ -397,102 +320,122 @@ function renderAll(){
   renderAdmin();
 }
 
-function addExpense(amount, category, note = "", method = "quick", date = todayISO()){
+async function addExpense(amount, category, note = "", method = "quick", date = todayISO()){
   amount = cleanNumber(amount);
   if(!amount || amount <= 0) return toast("أدخل مبلغًا صحيحًا");
-  db.expenses.push({
-    id: uid(),
-    user_id: session.user_id,
-    amount,
-    category,
-    note,
-    date,
-    entry_method: method
-  });
-  saveDB();
-  renderAll();
+  const res = await supabase.from("expenses").insert({ amount, category, note, expense_date: date, entry_method: method });
+  if(await checkSupabaseError(res, "تعذر حفظ المصروف")) return;
+  await loadAll();
   toast("تم تسجيل المصروف");
 }
 
-function deleteItem(table, id){
-  db[table] = db[table].filter(x => x.id !== id);
-  saveDB();
-  renderAll();
+async function deleteItem(table, id){
+  const res = await supabase.from(table).delete().eq("id", id);
+  if(await checkSupabaseError(res, "تعذر الحذف")) return;
+  await loadAll();
   toast("تم الحذف");
 }
 
-function addGoalSaving(id){
+async function addGoalSaving(id){
   const value = cleanNumber(prompt("كم تريد إضافة مبلغ لهذا الهدف؟"));
   if(!value || value <= 0) return;
-  const goal = db.goals.find(g => g.id === id && g.user_id === session.user_id);
-  if(!goal) return;
-  goal.saved_amount = cleanNumber(goal.saved_amount) + value;
-  saveDB();
-  renderAll();
+  const goal = state.goals.find(g => g.id === id);
+  const res = await supabase.from("goals").update({ saved_amount: cleanNumber(goal.saved_amount) + value }).eq("id", id);
+  if(await checkSupabaseError(res, "تعذر تحديث الهدف")) return;
+  await loadAll();
   toast("تم تحديث الهدف");
 }
 
-function toggleUser(id){
-  const user = db.users.find(u => u.id === id);
-  if(!user) return;
-  user.status = user.status === "active" ? "suspended" : "active";
-  saveDB();
-  renderAll();
+async function saveSalary(){
+  const payload = {
+    base_amount: cleanNumber($("baseSalaryAmount").value),
+    next_salary_date: $("nextSalaryDate").value || todayISO(),
+    note: $("salaryNote").value.trim()
+  };
+  let res;
+  if(state.salary?.id){
+    res = await supabase.from("salaries").update(payload).eq("id", state.salary.id);
+  } else {
+    res = await supabase.from("salaries").insert(payload);
+  }
+  if(await checkSupabaseError(res, "تعذر حفظ الراتب")) return;
+  await loadAll();
+  toast("تم حفظ الراتب");
 }
 
-function buildAIPayload(){
-  const s = calcSummary();
-  return {
-    instruction: "حلل فقط البيانات التالية. ممنوع اختراع أرقام أو افتراض دخل أو مصروف غير مذكور. إذا نقصت البيانات اذكر ذلك.",
-    salary: {
-      base_salary: s.baseSalary,
-      next_salary_date: s.nextSalaryDate,
-      days_to_salary: s.daysToSalary
-    },
-    calculated: {
-      extra_income_total: Number(s.extraIncomeTotal.toFixed(3)),
-      total_income: Number(s.totalIncome.toFixed(3)),
-      total_expenses: Number(s.totalExpenses.toFixed(3)),
-      income_remaining: Number(s.incomeRemaining.toFixed(3)),
-      upcoming_obligations: Number(s.upcomingObligations.toFixed(3)),
-      near_goals_required: Number(s.goalsRequiredNearTerm.toFixed(3)),
-      real_available: Number(s.realAvailable.toFixed(3)),
-      daily_safe_amount: Number(s.dailySafe.toFixed(3)),
-      today_expenses: Number(s.todayExpenseTotal.toFixed(3))
-    },
-    top_categories: s.topCategories.map(([category, amount]) => ({category, amount: Number(amount.toFixed(3))})),
-    goals: s.goals.map(g => ({
-      name: g.name,
-      target_amount: cleanNumber(g.target_amount),
-      saved_amount: cleanNumber(g.saved_amount),
-      due_date: g.due_date,
-      priority: priorityLabel(g.priority)
-    })),
-    obligations: s.obligations.map(o => ({
-      name: o.name,
-      amount: cleanNumber(o.amount),
-      type: o.type === "continuous" ? "مستمر" : "مؤقت",
-      due_day: cleanNumber(o.due_day),
-      end_date: o.end_date || null
-    }))
-  };
+async function addIncome(){
+  const amount = cleanNumber($("incomeAmount").value);
+  const source = $("incomeSource").value.trim();
+  if(!amount || amount <= 0) return toast("أدخل مبلغ الدخل");
+  if(!source) return toast("أدخل مصدر الدخل");
+  const res = await supabase.from("incomes").insert({
+    amount,
+    source,
+    income_date: $("incomeDate").value || todayISO(),
+    recurring: $("incomeRecurring").value === "true"
+  });
+  if(await checkSupabaseError(res, "تعذر إضافة الدخل")) return;
+  $("incomeAmount").value = "";
+  $("incomeSource").value = "";
+  await loadAll();
+  toast("تمت إضافة الدخل");
+}
+
+async function addGoal(){
+  const name = $("goalName").value.trim();
+  const target = cleanNumber($("goalTargetAmount").value);
+  const due = $("goalDueDate").value;
+  if(!name) return toast("أدخل اسم الهدف");
+  if(!target || target <= 0) return toast("أدخل مبلغ الهدف");
+  if(!due) return toast("أدخل تاريخ الهدف");
+  const res = await supabase.from("goals").insert({
+    name,
+    target_amount: target,
+    saved_amount: cleanNumber($("goalSavedAmount").value),
+    due_date: due,
+    priority: $("goalPriority").value,
+    status: "active"
+  });
+  if(await checkSupabaseError(res, "تعذر حفظ الهدف")) return;
+  $("goalName").value = "";
+  $("goalTargetAmount").value = "";
+  $("goalSavedAmount").value = "0";
+  $("goalDueDate").value = "";
+  await loadAll();
+  toast("تم حفظ الهدف");
+}
+
+async function addObligation(){
+  const name = $("obligationName").value.trim();
+  const amount = cleanNumber($("obligationAmount").value);
+  const dueDay = cleanNumber($("obligationDueDay").value);
+  if(!name) return toast("أدخل اسم الالتزام");
+  if(!amount || amount <= 0) return toast("أدخل مبلغ الالتزام");
+  if(!dueDay || dueDay < 1 || dueDay > 31) return toast("أدخل يوم استحقاق صحيح");
+  const res = await supabase.from("obligations").insert({
+    name,
+    amount,
+    type: $("obligationType").value,
+    due_day: dueDay,
+    start_date: $("obligationStartDate").value || todayISO(),
+    end_date: $("obligationEndDate").value || null,
+    status: "active"
+  });
+  if(await checkSupabaseError(res, "تعذر حفظ الالتزام")) return;
+  $("obligationName").value = "";
+  $("obligationAmount").value = "";
+  $("obligationDueDay").value = "";
+  $("obligationEndDate").value = "";
+  await loadAll();
+  toast("تم حفظ الالتزام");
 }
 
 function localAI(questionType, customQuestion = ""){
   const s = calcSummary();
-  const missing = [];
-  if(!s.baseSalary) missing.push("الراتب الأساسي");
-  if(!s.nextSalaryDate) missing.push("تاريخ الراتب القادم");
-
   const lines = [];
   lines.push("تحليل وازن بناءً على البيانات المدخلة فقط:");
   lines.push("");
-
-  if(missing.length){
-    lines.push(`البيانات الناقصة: ${missing.join("، ")}.`);
-    lines.push("");
-  }
-
+  if(!s.baseSalary) lines.push("البيانات الناقصة: الراتب الأساسي.");
   lines.push(`الدخل الكلي في الدورة الحالية: ${money(s.totalIncome)}.`);
   lines.push(`إجمالي المصروفات المسجلة: ${money(s.totalExpenses)}.`);
   lines.push(`المتبقي من الدخل: ${money(s.incomeRemaining)}.`);
@@ -501,33 +444,28 @@ function localAI(questionType, customQuestion = ""){
   lines.push("");
 
   if(questionType === "today"){
-    if(s.dailySafe <= 0) lines.push("اليوم لا يوجد مجال آمن للصرف حسب البيانات الحالية، لأن المتاح الحقيقي غير كافٍ.");
-    else lines.push(`تستطيع الصرف اليوم بشرط أن يكون قريبًا من ${money(s.dailySafe)} أو أقل، حتى لا يتأثر وصولك للراتب القادم.`);
+    lines.push(s.dailySafe <= 0 ? "اليوم لا يوجد مجال آمن للصرف حسب البيانات الحالية." : `تستطيع الصرف اليوم بشرط أن يكون قريبًا من ${money(s.dailySafe)} أو أقل.`);
   } else if(questionType === "pressure"){
     const pressures = [];
     if(s.upcomingObligations > 0) pressures.push(`الالتزامات القريبة: ${money(s.upcomingObligations)}`);
     if(s.goalsRequiredNearTerm > 0) pressures.push(`احتياج الأهداف القريبة: ${money(s.goalsRequiredNearTerm)}`);
     if(s.topCategories[0]) pressures.push(`أعلى بند صرف: ${s.topCategories[0][0]} بقيمة ${money(s.topCategories[0][1])}`);
-    lines.push(pressures.length ? `أكثر عناصر الضغط الحالية:\n- ${pressures.join("\n- ")}` : "لا توجد عناصر ضغط واضحة لأن البيانات المسجلة قليلة.");
+    lines.push(pressures.length ? `أكثر عناصر الضغط الحالية:\n- ${pressures.join("\n- ")}` : "لا توجد عناصر ضغط واضحة لأن البيانات قليلة.");
   } else if(questionType === "reduce"){
-    if(s.topCategories[0]) lines.push(`ابدأ بتخفيف بند ${s.topCategories[0][0]} لأنه أعلى بند صرف مسجل في الدورة الحالية.`);
-    else lines.push("لا توجد مصروفات كافية لتحديد بند يمكن تخفيفه.");
+    lines.push(s.topCategories[0] ? `ابدأ بتخفيف بند ${s.topCategories[0][0]} لأنه أعلى بند صرف مسجل.` : "لا توجد مصروفات كافية لتحديد بند يمكن تخفيفه.");
   } else {
-    if(s.realAvailable < 0) lines.push("الحالة: ضغط مالي. المتاح الحقيقي بالسالب بعد الالتزامات والأهداف القريبة.");
-    else if(s.dailySafe < 5) lines.push("الحالة: تحتاج متابعة. المبلغ اليومي المناسب منخفض.");
-    else lines.push("الحالة: مستقرة مبدئيًا حسب البيانات الحالية.");
+    lines.push(s.realAvailable < 0 ? "الحالة: ضغط مالي." : s.dailySafe < 5 ? "الحالة: تحتاج متابعة." : "الحالة: مستقرة مبدئيًا.");
   }
 
   if(s.nearestGoal){
     const need = Math.max(0, cleanNumber(s.nearestGoal.target_amount) - cleanNumber(s.nearestGoal.saved_amount));
     lines.push("");
-    lines.push(`أقرب هدف: ${s.nearestGoal.name}، والمتبقي له ${money(need)}، وتاريخه ${s.nearestGoal.due_date}.`);
+    lines.push(`أقرب هدف: ${s.nearestGoal.name}، والمتبقي له ${money(need)}.`);
   }
 
   if(customQuestion){
     lines.push("");
     lines.push(`سؤالك: ${customQuestion}`);
-    lines.push("الإجابة أعلاه مبنية على الأرقام المتاحة فقط، ولا تضيف أرقامًا غير موجودة.");
   }
 
   lines.push("");
@@ -535,182 +473,64 @@ function localAI(questionType, customQuestion = ""){
   return lines.join("\n");
 }
 
-function runAI(questionType = "summary"){
-  const custom = $("customAiQuestion").value.trim();
-  const answer = localAI(questionType, custom);
+async function runAI(questionType = "summary"){
+  const answer = localAI(questionType, $("customAiQuestion").value.trim());
   $("aiAnswer").textContent = answer;
-  db.ai_reports.push({
-    id: uid(),
-    user_id: session.user_id,
-    input_summary: buildAIPayload(),
-    ai_output: answer,
-    created_at: new Date().toISOString()
+  await supabase.from("ai_reports").insert({
+    input_summary: { questionType },
+    ai_output: answer
   });
-  saveDB();
+}
+
+async function createUserFromAdmin(){
+  if(profile.role !== "admin") return toast("هذه الصلاحية للأدمن فقط");
+  toast("إضافة المستخدمين تحتاج Edge Function. سنفعلها في الخطوة التالية.");
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  $("loginForm").addEventListener("submit", (e) => {
+  $("loginForm").addEventListener("submit", async (e) => {
     e.preventDefault();
-    login($("loginEmail").value.trim(), $("loginPassword").value);
+    await login($("loginEmail").value.trim(), $("loginPassword").value);
   });
 
   $("logoutBtn").addEventListener("click", logout);
   $("mobileLogoutBtn").addEventListener("click", logout);
 
-  document.querySelectorAll("[data-view]").forEach(btn => {
-    btn.addEventListener("click", () => switchView(btn.dataset.view));
-  });
+  document.querySelectorAll("[data-view]").forEach(btn => btn.addEventListener("click", () => switchView(btn.dataset.view)));
 
-  $("saveSalaryBtn").addEventListener("click", () => {
-    db.salaries[session.user_id] = {
-      base_amount: cleanNumber($("baseSalaryAmount").value),
-      next_salary_date: $("nextSalaryDate").value || todayISO(),
-      note: $("salaryNote").value.trim()
-    };
-    saveDB();
-    renderAll();
-    toast("تم حفظ الراتب");
-  });
+  $("saveSalaryBtn").addEventListener("click", saveSalary);
+  $("addIncomeBtn").addEventListener("click", addIncome);
 
-  $("addIncomeBtn").addEventListener("click", () => {
-    const amount = cleanNumber($("incomeAmount").value);
-    const source = $("incomeSource").value.trim();
-    if(!amount || amount <= 0) return toast("أدخل مبلغ الدخل");
-    if(!source) return toast("أدخل مصدر الدخل");
-
-    db.incomes.push({
-      id: uid(),
-      user_id: session.user_id,
-      amount,
-      source,
-      date: $("incomeDate").value || todayISO(),
-      recurring: $("incomeRecurring").value
-    });
-    saveDB();
-    $("incomeAmount").value = "";
-    $("incomeSource").value = "";
-    $("incomeRecurring").value = "no";
-    renderAll();
-    toast("تمت إضافة الدخل");
-  });
-
-  $("addQuickExpenseBtn").addEventListener("click", () => {
-    addExpense(
-      $("quickExpenseAmount").value,
-      $("quickExpenseCategory").value,
-      $("quickExpenseNote").value.trim(),
-      "quick"
-    );
+  $("addQuickExpenseBtn").addEventListener("click", async () => {
+    await addExpense($("quickExpenseAmount").value, $("quickExpenseCategory").value, $("quickExpenseNote").value.trim(), "quick");
     $("quickExpenseAmount").value = "";
     $("quickExpenseNote").value = "";
   });
 
   document.querySelectorAll("[data-template-category]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      addExpense(btn.dataset.templateAmount, btn.dataset.templateCategory, "قالب سريع", "template");
-    });
+    btn.addEventListener("click", () => addExpense(btn.dataset.templateAmount, btn.dataset.templateCategory, "قالب سريع", "template"));
   });
 
-  $("addExpenseBtn").addEventListener("click", () => {
-    addExpense(
-      $("expenseAmount").value,
-      $("expenseCategory").value,
-      $("expenseNote").value.trim(),
-      "detailed",
-      $("expenseDate").value || todayISO()
-    );
+  $("addExpenseBtn").addEventListener("click", async () => {
+    await addExpense($("expenseAmount").value, $("expenseCategory").value, $("expenseNote").value.trim(), "detailed", $("expenseDate").value || todayISO());
     $("expenseAmount").value = "";
     $("expenseNote").value = "";
   });
 
-  $("addGoalBtn").addEventListener("click", () => {
-    const name = $("goalName").value.trim();
-    const target = cleanNumber($("goalTargetAmount").value);
-    const due = $("goalDueDate").value;
-    if(!name) return toast("أدخل اسم الهدف");
-    if(!target || target <= 0) return toast("أدخل مبلغ الهدف");
-    if(!due) return toast("أدخل تاريخ الهدف");
+  $("addGoalBtn").addEventListener("click", addGoal);
+  $("addObligationBtn").addEventListener("click", addObligation);
+  $("addUserBtn").addEventListener("click", createUserFromAdmin);
 
-    db.goals.push({
-      id: uid(),
-      user_id: session.user_id,
-      name,
-      target_amount: target,
-      saved_amount: cleanNumber($("goalSavedAmount").value),
-      due_date: due,
-      priority: $("goalPriority").value,
-      status: "active"
-    });
-    saveDB();
-    ["goalName","goalTargetAmount","goalDueDate"].forEach(id => $(id).value = "");
-    $("goalSavedAmount").value = "0";
-    $("goalPriority").value = "high";
-    renderAll();
-    toast("تم حفظ الهدف");
-  });
-
-  $("addObligationBtn").addEventListener("click", () => {
-    const name = $("obligationName").value.trim();
-    const amount = cleanNumber($("obligationAmount").value);
-    const dueDay = cleanNumber($("obligationDueDay").value);
-    if(!name) return toast("أدخل اسم الالتزام");
-    if(!amount || amount <= 0) return toast("أدخل مبلغ الالتزام");
-    if(!dueDay || dueDay < 1 || dueDay > 31) return toast("أدخل يوم استحقاق صحيح");
-
-    db.obligations.push({
-      id: uid(),
-      user_id: session.user_id,
-      name,
-      amount,
-      type: $("obligationType").value,
-      due_day: dueDay,
-      start_date: $("obligationStartDate").value || todayISO(),
-      end_date: $("obligationEndDate").value,
-      status: "active"
-    });
-    saveDB();
-    ["obligationName","obligationAmount","obligationDueDay","obligationEndDate"].forEach(id => $(id).value = "");
-    $("obligationType").value = "continuous";
-    $("obligationStartDate").value = todayISO();
-    renderAll();
-    toast("تم حفظ الالتزام");
-  });
-
-  document.querySelectorAll("[data-ai-question]").forEach(btn => {
-    btn.addEventListener("click", () => runAI(btn.dataset.aiQuestion));
-  });
+  document.querySelectorAll("[data-ai-question]").forEach(btn => btn.addEventListener("click", () => runAI(btn.dataset.aiQuestion)));
   $("askAiBtn").addEventListener("click", () => runAI("custom"));
 
-  $("addUserBtn").addEventListener("click", () => {
-    const user = currentUser();
-    if(user.role !== "admin") return toast("هذه الصلاحية للأدمن فقط");
-    const name = $("newUserName").value.trim();
-    const email = $("newUserEmail").value.trim().toLowerCase();
-    const password = $("newUserPassword").value || "123456";
-    const role = $("newUserRole").value;
-    if(!name || !email) return toast("أكمل بيانات الحساب");
-    if(db.users.some(u => u.email.toLowerCase() === email)) return toast("البريد موجود مسبقًا");
+  document.body.addEventListener("click", async (e) => {
+    const del = e.target.closest("[data-delete-table]");
+    if(del) await deleteItem(del.dataset.deleteTable, del.dataset.deleteId);
 
-    db.users.push({
-      id: uid(),
-      name,
-      email,
-      password,
-      role,
-      status: "active",
-      created_at: todayISO()
-    });
-    saveDB();
-    $("newUserName").value = "";
-    $("newUserEmail").value = "";
-    $("newUserPassword").value = "123456";
-    $("newUserRole").value = "user";
-    renderAll();
-    toast("تمت إضافة الحساب");
+    const saving = e.target.closest("[data-goal-saving]");
+    if(saving) await addGoalSaving(saving.dataset.goalSaving);
   });
 
-  if(session && currentUser()){
-    showApp();
-  }
+  init();
 });
